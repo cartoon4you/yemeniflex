@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 // ==================== CONFIG & TYPES ====================
@@ -22,7 +22,7 @@ interface Toast {
   type?: 'success' | 'error' | 'info';
 }
 
-export function WorldCinemaContent() {
+export default function WorldCinemaContent() {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedMedia, setSelectedMedia] = useState<any>(null);
@@ -218,7 +218,7 @@ export function WorldCinemaContent() {
       {/* Toast Notifications */}
       <div className="fixed top-[76px] left-4 z-[9999] flex flex-col gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className="bg-[#181818] border border-white/10 border-r-4 border-r-[#e50914] rounded-xl px-4 py-3 text-[13px] font-semibold shadow-lg animate-fade-in">
+          <div key={t.id} className="bg-[#181818] border border-white/10 border-r-4 border-r-[#e50914] rounded-xl px-4 py-3 text-[13px] font-semibold shadow-lg">
             {t.message}
           </div>
         ))}
@@ -450,8 +450,4 @@ export function WorldCinemaContent() {
       </main>
     </div>
   );
-}
-
-export default function Page() {
-  return <WorldCinemaContent />;
 }
