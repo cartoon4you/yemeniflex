@@ -48,7 +48,7 @@ export default function WorldCinemaContent() {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((message: string, type = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
