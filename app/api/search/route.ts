@@ -9,7 +9,11 @@ export async function GET(request: NextRequest) {
     }
 
     const results = await searchMedia(q);
-    return NextResponse.json({ success: true, data: results, count: results.length });
+    return NextResponse.json({ success: true, data: results, count: results.length }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+      }
+    });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'فشل البحث' },

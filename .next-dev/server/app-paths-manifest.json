@@ -1,0 +1,18 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/catalog/route": "app/api/catalog/route.js",
+  "/api/details/route": "app/api/details/route.js",
+  "/api/extract/route": "app/api/extract/route.js",
+  "/api/home/route": "app/api/home/route.js",
+  "/api/linkgrabber/route": "app/api/linkgrabber/route.js",
+  "/api/search/route": "app/api/search/route.js",
+  "/api/tmdb/route": "app/api/tmdb/route.js",
+  "/api/proxy/video/route": "app/api/proxy/video/route.js",
+  "/linkgrabber/page": "app/linkgrabber/page.js",
+  "/search/page": "app/search/page.js",
+  "/watch/page": "app/watch/page.js",
+  "/watchlist/page": "app/watchlist/page.js",
+  "/worldcinema/page": "app/worldcinema/page.js",
+  "/catalog/page": "app/catalog/page.js",
+  "/page": "app/page.js"
+}

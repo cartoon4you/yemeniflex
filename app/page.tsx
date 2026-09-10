@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import {
   Film,
@@ -14,38 +12,19 @@ import {
 } from 'lucide-react';
 import HeroSlider from '@/components/HeroSlider';
 import MediaCard from '@/components/MediaCard';
-import { MediaItem } from '@/lib/types';
 import { CATEGORIES } from '@/lib/catalog-data';
+import { getHomeContent } from '@/lib/scraper-service';
 
-export default function HomePage() {
-  const [featured, setFeatured] = useState<MediaItem[]>([]);
-  const [latestMovies, setLatestMovies] = useState<MediaItem[]>([]);
-  const [latestSeries, setLatestSeries] = useState<MediaItem[]>([]);
-  const [trending, setTrending] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('all');
+// Add export for revalidate if you want ISR
+export const revalidate = 300;
 
-  useEffect(() => {
-    async function loadHome() {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/home');
-        const data = await res.json();
-        if (data.success && data.data) {
-          setFeatured(data.data.featured || []);
-          setLatestMovies(data.data.latestMovies || []);
-          setLatestSeries(data.data.latestSeries || []);
-          setTrending(data.data.trending || []);
-        }
-      } catch (error) {
-        console.error('Failed to load home content:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadHome();
-  }, []);
+export default async function HomePage() {
+  const data = await getHomeContent();
+  
+  const featured = data.featured || [];
+  const latestMovies = data.latestMovies || [];
+  const latestSeries = data.latestSeries || [];
+  const trending = data.trending || [];
 
   return (
     <div className="w-full space-y-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-6" dir="rtl">
@@ -62,11 +41,7 @@ export default function HomePage() {
       </div>
 
       {/* 1. Hero Carousel Slider */}
-      {loading ? (
-        <div className="w-full h-[480px] sm:h-[580px] lg:h-[640px] rounded-2xl sm:rounded-3xl bg-neutral-900 animate-pulse border border-neutral-800"></div>
-      ) : (
-        <HeroSlider items={featured} />
-      )}
+      <HeroSlider items={featured} />
 
       {/* 2. Category Quick Chips Bar */}
       <section id="home-categories-chips" className="space-y-3">
@@ -120,19 +95,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="aspect-[2/3] bg-neutral-900 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {latestMovies.slice(0, 5).map((item) => (
-              <MediaCard key={item.id} item={item} />
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+          {latestMovies.slice(0, 5).map((item) => (
+            <MediaCard key={item.id} item={item} />
+          ))}
+        </div>
       </section>
 
       {/* 4. Section: Latest TV Series */}
@@ -157,19 +124,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="aspect-[2/3] bg-neutral-900 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {latestSeries.slice(0, 5).map((item) => (
-              <MediaCard key={item.id} item={item} />
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+          {latestSeries.slice(0, 5).map((item) => (
+            <MediaCard key={item.id} item={item} />
+          ))}
+        </div>
       </section>
 
       {/* 5. Section: Trending & Highly Rated */}
@@ -194,19 +153,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="aspect-[2/3] bg-neutral-900 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {trending.slice(0, 5).map((item) => (
-              <MediaCard key={item.id} item={item} />
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+          {trending.slice(0, 5).map((item) => (
+            <MediaCard key={item.id} item={item} />
+          ))}
+        </div>
       </section>
     </div>
   );

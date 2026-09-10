@@ -15,7 +15,7 @@ const GENRES = [
     { id: 10770, name: "تلفزيوني (TV Movie)" }, { id: 53, name: "إثارة (Thriller)" }, { id: 10752, name: "حرب (War)" }, { id: 37, name: "غربي (Western)" }
 ];
 
-export default function WorldCinemaPage() {
+export function WorldCinemaContent() {
     const [movies, setMovies] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [selectedMedia, setSelectedMedia] = useState<any>(null);
@@ -183,7 +183,7 @@ export default function WorldCinemaPage() {
             {trailerKey && (
                 <div className="fixed inset-0 bg-black/92 z-[9999] flex items-center justify-center p-4">
                     <div className="relative w-full max-w-[900px] aspect-video bg-black rounded-xl overflow-hidden">
-                        <button onClick={() => setTrailerKey(null)} className="absolute -top-9 right-0 bg-[#e50914] text-white w-8 h-8 rounded-full cursor-pointer border-none">✕</button>
+                        <button onClick={() => setTrailerKey(null)} className="absolute -top-9 right-0 bg-[#e50914] text-white w-8 h-8 rounded-full cursor-pointer border-none">{"✕"}</button>
                         <iframe src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1`} className="w-full h-full border-none" allowFullScreen />
                     </div>
                 </div>
@@ -195,7 +195,7 @@ export default function WorldCinemaPage() {
                     <aside className="fixed top-0 right-0 w-[280px] max-w-[80vw] h-screen bg-[#111] border-l border-white/10 z-[1200] p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-5 pb-3 border-b border-white/10">
                             <span className="font-bold">📁 التصنيفات</span>
-                            <button onClick={() => setIsSidebarOpen(false)} className="text-[#aaa] cursor-pointer bg-none border-none text-[22px]">✕</button>
+                            <button onClick={() => setIsSidebarOpen(false)} className="text-[#aaa] cursor-pointer bg-none border-none text-[22px]">{"✕"}</button>
                         </div>
                         {GENRES.map(g => (
                             <div key={g.id} onClick={() => { setSelectedGenre(String(g.id)); setIsSidebarOpen(false); }} className="py-3.5 px-4 rounded-xl bg-[#181818] text-[#ddd] text-[14px] cursor-pointer mb-2">
@@ -354,4 +354,8 @@ export default function WorldCinemaPage() {
             </main>
         </div>
     );
+}
+
+export default function Page() {
+    return <WorldCinemaContent />;
 }

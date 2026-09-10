@@ -31,6 +31,10 @@ export async function GET(request: NextRequest) {
       },
       activeCategory,
       categories: CATEGORIES,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+      }
     });
   } catch (error: any) {
     return NextResponse.json(

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, Film, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle } from 'lucide-react';
 import MediaCard from '@/components/MediaCard';
 import { MediaItem } from '@/lib/types';
 
@@ -14,6 +14,7 @@ function SearchContent() {
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function performSearch(term: string) {
@@ -21,24 +22,40 @@ function SearchContent() {
         setResults([]);
         return;
       }
+      
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
       try {
         setLoading(true);
-        const res = await fetch(`/api/search?q=${encodeURIComponent(term.trim())}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(term.trim())}`, {
+          signal: abortControllerRef.current.signal
+        });
         const data = await res.json();
         if (data.success) {
           setResults(data.data || []);
         }
-      } catch (error) {
-        console.error('Search error:', error);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Search error:', error);
+        }
       } finally {
         setLoading(false);
       }
     }
 
-    if (initialQuery) {
-      performSearch(initialQuery);
-    }
-  }, [initialQuery]);
+    const timerId = setTimeout(() => {
+      if (query.trim() && query !== initialQuery) {
+        router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+      } else if (query === initialQuery) {
+        performSearch(initialQuery);
+      }
+    }, 500);
+
+    return () => clearTimeout(timerId);
+  }, [query, initialQuery, router]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

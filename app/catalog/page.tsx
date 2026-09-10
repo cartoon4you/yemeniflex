@@ -1,88 +1,35 @@
-'use client';
-
-import React, { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import {
-  LayoutGrid,
-  Filter,
-  ArrowUpDown,
-  Film,
-  Tv,
-  Globe,
-  Sparkles,
-  Flame,
-  Clapperboard,
-  Video,
-} from 'lucide-react';
+import React from 'react';
+import Link from 'next/link';
+import { LayoutGrid } from 'lucide-react';
 import MediaCard from '@/components/MediaCard';
-import { MediaItem, CategoryOption } from '@/lib/types';
 import { CATEGORIES } from '@/lib/catalog-data';
+import { getCatalogItems } from '@/lib/scraper-service';
+import CatalogFilters from '@/components/CatalogFilters';
 
-function CatalogContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export const revalidate = 60; // Cache for 60 seconds
 
-  const activeCategory = searchParams.get('category') || 'all';
-  const activeType = searchParams.get('type') || 'all';
-  const activeSort = searchParams.get('sort') || 'latest';
-  const activePage = parseInt(searchParams.get('page') || '1', 10);
+export default async function CatalogPage({ 
+  searchParams 
+}: { 
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
+}) {
+  const params = await searchParams;
+  const activeCategory = (params.category as string) || 'all';
+  const activeType = (params.type as string) || 'all';
+  const activeSort = (params.sort as string) || 'latest';
+  const activePage = parseInt((params.page as string) || '1', 10);
 
-  const [items, setItems] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const result = await getCatalogItems({
+    category: activeCategory,
+    type: activeType !== 'all' ? activeType : undefined,
+    sort: activeSort,
+    page: activePage,
+    limit: 18,
+  });
 
-  useEffect(() => {
-    async function fetchFilteredCatalog() {
-      try {
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (activeCategory && activeCategory !== 'all') {
-          params.set('category', activeCategory);
-        }
-        if (activeType && activeType !== 'all') {
-          params.set('type', activeType);
-        }
-        if (activeSort) {
-          params.set('sort', activeSort);
-        }
-        params.set('page', activePage.toString());
-
-        const res = await fetch(`/api/catalog?${params.toString()}`);
-        const data = await res.json();
-        if (data.success) {
-          setItems(data.data || []);
-          setTotalCount(data.pagination?.total || 0);
-          setTotalPages(data.pagination?.totalPages || 1);
-        }
-      } catch (error) {
-        console.error('Catalog fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchFilteredCatalog();
-  }, [activeCategory, activeType, activeSort, activePage]);
-
-  const updateFilters = (newParams: Record<string, string>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(newParams).forEach(([key, val]) => {
-      if (val === 'all' || !val) {
-        params.delete(key);
-      } else {
-        params.set(key, val);
-      }
-    });
-    // Reset to page 1 on filter change
-    params.set('page', '1');
-    router.push(`/catalog?${params.toString()}`);
-  };
-
-  const getActiveCategoryTitle = () => {
-    const found = CATEGORIES.find((c) => c.id === activeCategory);
-    return found ? found.label : 'جميع التصنيفات';
-  };
+  const items = result.items;
+  const foundCat = CATEGORIES.find((c) => c.id === activeCategory);
+  const activeCategoryTitle = foundCat ? foundCat.label : 'جميع التصنيفات';
 
   return (
     <div className="w-full space-y-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-6" dir="rtl">
@@ -94,7 +41,7 @@ function CatalogContent() {
             <span>تصفح الكتالوج وفلترة الأقسام</span>
           </div>
           <h1 className="text-xl sm:text-3xl font-extrabold text-white">
-            {getActiveCategoryTitle()}
+            {activeCategoryTitle}
           </h1>
           <p className="text-xs sm:text-sm text-neutral-400">
             استعرض الأفلام والمسلسلات بحسب التصنيف والجودة وسنة الإصدار
@@ -106,12 +53,19 @@ function CatalogContent() {
       <div className="flex items-center gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [-webkit-overflow-scrolling:touch]">
         {CATEGORIES.map((cat) => {
           const isSelected = activeCategory === cat.id;
+          
+          // Build new search params for link
+          const linkParams = new URLSearchParams();
+          if (cat.id !== 'all') linkParams.set('category', cat.id);
+          if (activeType !== 'all') linkParams.set('type', activeType);
+          if (activeSort !== 'latest') linkParams.set('sort', activeSort);
+          
+          const href = `/catalog${linkParams.toString() ? `?${linkParams.toString()}` : ''}`;
+          
           return (
-            <button
+            <Link
               key={cat.id}
-              type="button"
-              id={`cat-filter-${cat.id}`}
-              onClick={() => updateFilters({ category: cat.id })}
+              href={href}
               className={`flex-shrink-0 px-4 py-2.5 min-h-[44px] flex items-center justify-center rounded-xl text-xs font-semibold transition border cursor-pointer active:scale-95 ${
                 isSelected
                   ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-950/40'
@@ -119,61 +73,16 @@ function CatalogContent() {
               }`}
             >
               {cat.label}
-            </button>
+            </Link>
           );
         })}
       </div>
 
       {/* Sub-Filters: Type (Movies / Series) and Sort */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-neutral-900/60 p-3.5 sm:p-4 rounded-2xl border border-neutral-800/80">
-        {/* Type Filter */}
-        <div className="flex items-center flex-wrap gap-1.5">
-          <span className="text-xs text-neutral-400 ml-1 sm:ml-2">النوع:</span>
-          {[
-            { id: 'all', label: 'الكل' },
-            { id: 'movie', label: 'أفلام فقط' },
-            { id: 'series', label: 'مسلسلات فقط' },
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              id={`type-filter-${t.id}`}
-              onClick={() => updateFilters({ type: t.id })}
-              className={`px-3 py-2 min-h-[40px] flex items-center justify-center rounded-xl text-xs font-medium transition cursor-pointer active:scale-95 ${
-                activeType === t.id
-                  ? 'bg-neutral-800 text-white font-bold border border-neutral-700'
-                  : 'text-neutral-400 hover:text-white bg-neutral-900/40'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Sort Filter */}
-        <div className="flex items-center gap-2">
-          <ArrowUpDown className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-          <span className="text-xs text-neutral-400 shrink-0">الترتيب:</span>
-          <select
-            value={activeSort}
-            onChange={(e) => updateFilters({ sort: e.target.value })}
-            className="w-full sm:w-auto bg-neutral-950 text-xs text-neutral-200 border border-neutral-800 rounded-xl px-3 py-2 min-h-[40px] focus:outline-none focus:border-red-600 cursor-pointer"
-          >
-            <option value="latest">الأحدث إضافة</option>
-            <option value="rating">الأعلى تقييماً (IMDb)</option>
-            <option value="year">سنة الإنتاج</option>
-          </select>
-        </div>
-      </div>
+      <CatalogFilters activeType={activeType} activeSort={activeSort} />
 
       {/* Items Grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-          {[...Array(12)].map((_, i) => (
-            <div key={i} className="aspect-[2/3] bg-neutral-900 rounded-2xl animate-pulse" />
-          ))}
-        </div>
-      ) : items.length > 0 ? (
+      {items.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
           {items.map((item) => (
             <MediaCard key={item.id} item={item} />
@@ -182,29 +91,14 @@ function CatalogContent() {
       ) : (
         <div className="p-10 sm:p-16 text-center bg-neutral-900/40 rounded-3xl border border-neutral-800/60 space-y-3">
           <p className="text-neutral-400 text-sm">لم يتم العثور على أي أعمال في هذا التصنيف حالياً.</p>
-          <button
-            type="button"
-            onClick={() => updateFilters({ category: 'all', type: 'all' })}
-            className="px-5 py-2.5 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-semibold cursor-pointer active:scale-95"
+          <Link
+            href="/catalog"
+            className="inline-flex px-5 py-2.5 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-semibold items-center justify-center cursor-pointer active:scale-95"
           >
             إعادة تعيين الفلاتر
-          </button>
+          </Link>
         </div>
       )}
     </div>
-  );
-}
-
-export default function CatalogPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="max-w-7xl mx-auto p-8 text-center text-neutral-400">
-          جاري تحميل التصنيفات...
-        </div>
-      }
-    >
-      <CatalogContent />
-    </Suspense>
   );
 }

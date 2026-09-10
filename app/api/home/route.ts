@@ -4,7 +4,10 @@ import { getHomeContent } from '@/lib/scraper-service';
 export async function GET() {
   try {
     const data = await getHomeContent();
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json(
+      { success: true, data },
+      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'فشل جلب بيانات الصفحة الرئيسية' },
