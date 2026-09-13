@@ -20,65 +20,145 @@ function getRandomUserAgent(): string {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-// In-memory cache with standard TTL (15 minutes)
-interface CacheEntry<T> {
+// ==============================================================================
+// 1. IN-MEMORY CONCURRENT CACHING SYSTEM (ConcurrentHashMap semantics)
+// ==============================================================================
+export interface CacheEntry<T> {
   data: T;
   expiresAt: number;
 }
 
-const memoryCache = new Map<string, CacheEntry<any>>();
+/**
+ * Thread-safe / Concurrent In-Memory Cache with fine-grained TTL.
+ * Prevents redundant multi-page HTML parsing and deep stream crawling.
+ */
+export class ConcurrentMemoryCache<T> {
+  private cache = new Map<string, CacheEntry<T>>();
+  private defaultTtlMs: number;
 
-const pendingRequests = new Map<string, Promise<any>>();
+  constructor(defaultTtlMs: number = 15 * 60 * 1000) {
+    this.defaultTtlMs = defaultTtlMs;
+  }
+
+  get(key: string): T | null {
+    if (!key) return null;
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data;
+  }
+
+  set(key: string, data: T, ttlMs?: number): void {
+    if (!key) return;
+    const ttl = ttlMs ?? this.defaultTtlMs;
+    this.cache.set(key, {
+      data,
+      expiresAt: Date.now() + ttl,
+    });
+  }
+
+  has(key: string): boolean {
+    return this.get(key) !== null;
+  }
+
+  delete(key: string): boolean {
+    return this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
+// Domain-partitioned concurrent in-memory caches
+// 15-minute TTL for Home Screen items (latest additions)
+export const homeContentCache = new ConcurrentMemoryCache<any>(15 * 60 * 1000);
+
+// 60-minute TTL for parsed series episodes
+export const seriesEpisodesCache = new ConcurrentMemoryCache<EpisodeItem[]>(60 * 60 * 1000);
+
+// 60-minute TTL for parsed direct video streams and servers
+export const videoStreamsCache = new ConcurrentMemoryCache<ServerOption[]>(60 * 60 * 1000);
+
+// 60-minute TTL for full media details
+export const mediaDetailsCache = new ConcurrentMemoryCache<MediaItem>(60 * 60 * 1000);
+
+// 15-minute TTL for raw HTML responses
+export const htmlCache = new ConcurrentMemoryCache<string>(15 * 60 * 1000);
+
+// Legacy cache compatibility helpers
+const generalMemoryCache = new ConcurrentMemoryCache<any>(15 * 60 * 1000);
 
 export function getFromCache<T>(key: string): T | null {
-  const entry = memoryCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    memoryCache.delete(key);
-    return null;
-  }
-  return entry.data as T;
+  return generalMemoryCache.get(key) as T | null;
 }
 
 export function saveToCache<T>(key: string, data: T, ttlMs = 15 * 60 * 1000): void {
-  memoryCache.set(key, {
-    data,
-    expiresAt: Date.now() + ttlMs,
-  });
+  generalMemoryCache.set(key, data, ttlMs);
 }
 
+// In-flight deduping promises map
+const pendingRequests = new Map<string, Promise<any>>();
+
+// ==============================================================================
+// 2. OPTIMIZED NETWORK CONNECTIONS & TIMEOUTS
+// ==============================================================================
+export const STANDARD_TIMEOUT_MS = 10000; // Strict 10,000ms timeout for standard HTML
+export const DEEP_STREAM_TIMEOUT_MS = 15000; // Strict 15,000ms timeout for watch page & stream extraction
+
 /**
- * Fetch and load HTML using cheerio with random User-Agent & timeout
+ * Fetch and load HTML using cheerio with strict timeouts (10000ms / 15000ms)
+ * and explicit Accept-Encoding: gzip, deflate for payload compression.
  */
-export async function fetchHTML(url: string): Promise<cheerio.CheerioAPI | null> {
-  const cacheKey = `html_${url}`;
-  
+export async function fetchHTML(
+  url: string,
+  timeoutMs: number = STANDARD_TIMEOUT_MS
+): Promise<cheerio.CheerioAPI | null> {
+  const cachedHtml = htmlCache.get(url);
+  if (cachedHtml) {
+    return cheerio.load(cachedHtml, { xml: false });
+  }
+
+  const cacheKey = `fetch_${url}`;
   if (pendingRequests.has(cacheKey)) {
     return pendingRequests.get(cacheKey);
   }
 
   const fetchPromise = (async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // reduced timeout for speed
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    try {
       const response = await fetch(url, {
         headers: {
           'User-Agent': getRandomUserAgent(),
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate', // Explicit compression header
+          'Connection': 'keep-alive',
           Referer: BASE_URL,
         },
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       if (!response.ok) return null;
       const html = await response.text();
-      return cheerio.load(html, { xml: false }); // Disable XML mode for faster parsing
-    } catch (error) {
+      htmlCache.set(url, html, 15 * 60 * 1000);
+      return cheerio.load(html, { xml: false });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        console.warn(`[Network] Connection timed out after ${timeoutMs}ms for ${url}`);
+      }
       return null;
     } finally {
+      clearTimeout(timeoutId);
       pendingRequests.delete(cacheKey);
     }
   })();
@@ -158,7 +238,8 @@ function parseEntryBoxes($: cheerio.CheerioAPI, defaultType: 'movie' | 'series' 
 }
 
 /**
- * Scrape Home content directly from Akwam /movies and /series
+ * Scrape Home content directly from Akwam /movies and /series.
+ * Home screen items (latest additions) are cached in memory for 15 minutes (TTL).
  */
 export async function getHomeContent(): Promise<{
   featured: MediaItem[];
@@ -166,8 +247,8 @@ export async function getHomeContent(): Promise<{
   latestSeries: MediaItem[];
   trending: MediaItem[];
 }> {
-  const cacheKey = 'home_content_live_v2';
-  const cached = getFromCache<any>(cacheKey);
+  const cacheKey = 'home_screen_latest_additions_15m';
+  const cached = homeContentCache.get(cacheKey) || getFromCache<any>(cacheKey);
   if (cached) return cached;
   
   if (pendingRequests.has(cacheKey)) {
@@ -179,10 +260,10 @@ export async function getHomeContent(): Promise<{
     let scrapedSeries: MediaItem[] = [];
 
     try {
-      // 1. Fetch live movies and series in parallel
+      // 1. Fetch live movies and series in parallel with strict 10000ms timeout
       const [$movies, $series] = await Promise.all([
-        fetchHTML(`${BASE_URL}/movies`),
-        fetchHTML(`${BASE_URL}/series`)
+        fetchHTML(`${BASE_URL}/movies`, STANDARD_TIMEOUT_MS),
+        fetchHTML(`${BASE_URL}/series`, STANDARD_TIMEOUT_MS)
       ]);
       
       if ($movies) {
@@ -218,6 +299,8 @@ export async function getHomeContent(): Promise<{
       trending: trending.slice(0, 10),
     };
 
+    // Store in ConcurrentMemoryCache with 15-minute TTL (15 * 60 * 1000 ms)
+    homeContentCache.set(cacheKey, result, 15 * 60 * 1000);
     saveToCache(cacheKey, result, 15 * 60 * 1000);
     return result;
   })();
@@ -358,11 +441,21 @@ export function parseMediaId(rawId: string): string {
 }
 
 /**
- * Get media details by ID, extracting real direct watch and download servers
+ * Get media details by ID, extracting real direct watch and download servers.
+ * In-Memory Caching: Cached episodes and direct streams are loaded instantly from memory
+ * rather than executing redundant multi-page HTML parsing.
  */
 export async function getMediaDetails(id: string): Promise<MediaItem | null> {
+  const decodedPath = parseMediaId(id);
   const cacheKey = `media_details_${id}`;
-  const cached = getFromCache<MediaItem>(cacheKey);
+
+  // 1. Check Concurrent Memory Cache first for 0ms instantaneous return
+  const cached =
+    mediaDetailsCache.get(cacheKey) ||
+    mediaDetailsCache.get(id) ||
+    mediaDetailsCache.get(decodedPath) ||
+    getFromCache<MediaItem>(cacheKey);
+
   if (cached) return cached;
 
   if (pendingRequests.has(cacheKey)) {
@@ -373,12 +466,14 @@ export async function getMediaDetails(id: string): Promise<MediaItem | null> {
     // Check in sample catalog
     const sampleFound = SAMPLE_CATALOG.find((item) => item.id === id);
 
-    // Robust path decode
-    const decodedPath = parseMediaId(id);
+    // Check if we already have streams cached for this specific video or episode
+    const cachedStreams = videoStreamsCache.get(id) || videoStreamsCache.get(decodedPath);
+    // Check if we already have episodes cached for this series
+    const cachedEpisodes = seriesEpisodesCache.get(id) || seriesEpisodesCache.get(decodedPath);
 
     try {
       const fullUrl = `${BASE_URL}${decodedPath.startsWith('/') ? decodedPath : `/${decodedPath}`}`;
-      const $ = await fetchHTML(fullUrl);
+      const $ = await fetchHTML(fullUrl, STANDARD_TIMEOUT_MS);
       if ($) {
         const title =
           $('h1.entry-title, .entry-title, h1.title').first().text().trim() ||
@@ -408,6 +503,16 @@ export async function getMediaDetails(id: string): Promise<MediaItem | null> {
         const servers: ServerOption[] = [];
         const seenUrls = new Set<string>();
 
+        // If direct streams were already cached for this video, use them immediately!
+        if (cachedStreams && cachedStreams.length > 0) {
+          cachedStreams.forEach((s) => {
+            if (!seenUrls.has(s.url)) {
+              seenUrls.add(s.url);
+              servers.push(s);
+            }
+          });
+        }
+
         // Extract quality number helper
         const extractQualityNum = (text: string): number => {
           const match = text.match(/(2160p?|4k|1080p?|720p?|480p?|360p?|fhd|hd|sd)/i);
@@ -421,173 +526,196 @@ export async function getMediaDetails(id: string): Promise<MediaItem | null> {
           return 720;
         };
 
-        // 1. Scan quality tabs mapping (#tab-4 -> 720, #tab-3 -> 1080, etc.)
-        const tabQualities: Record<string, number> = {};
-        $('.header-tabs li a, .tabs li a').each((_, el) => {
-          const href = $(el).attr('href') || '';
-          const text = $(el).text().trim();
-          if (href.startsWith('#')) {
-            const tabId = href.replace('#', '');
-            const qMatch = text.match(/(2160|4k|1080|720|480|360)/i);
-            if (qMatch) {
-              let q = parseInt(qMatch[1]);
-              if (text.toLowerCase().includes('4k')) q = 2160;
-              tabQualities[tabId] = q;
+        // Only parse watch pages if we don't have cached servers yet
+        if (servers.length === 0) {
+          // 1. Scan quality tabs mapping (#tab-4 -> 720, #tab-3 -> 1080, etc.)
+          const tabQualities: Record<string, number> = {};
+          $('.header-tabs li a, .tabs li a').each((_, el) => {
+            const href = $(el).attr('href') || '';
+            const text = $(el).text().trim();
+            if (href.startsWith('#')) {
+              const tabId = href.replace('#', '');
+              const qMatch = text.match(/(2160|4k|1080|720|480|360)/i);
+              if (qMatch) {
+                let q = parseInt(qMatch[1]);
+                if (text.toLowerCase().includes('4k')) q = 2160;
+                tabQualities[tabId] = q;
+              }
             }
-          }
-        });
+          });
 
-        // 2. Discover all watch links
-        const watchTargets: { url: string; quality: number }[] = [];
-        const seenWatchUrls = new Set<string>();
+          // 2. Discover all watch links
+          const watchTargets: { url: string; quality: number }[] = [];
+          const seenWatchUrls = new Set<string>();
 
-        // In tab contents or download containers
-        $('div.tab-content, div.tab-pane, [data-quality], .qualities, #downloads').each((_, tabEl) => {
-          const $tab = $(tabEl);
-          const tabId = $tab.attr('id') || '';
-          const tabQuality = tabQualities[tabId] || extractQualityNum($tab.text() + ' ' + ($tab.attr('data-quality') || ''));
+          // In tab contents or download containers
+          $('div.tab-content, div.tab-pane, [data-quality], .qualities, #downloads').each((_, tabEl) => {
+            const $tab = $(tabEl);
+            const tabId = $tab.attr('id') || '';
+            const tabQuality = tabQualities[tabId] || extractQualityNum($tab.text() + ' ' + ($tab.attr('data-quality') || ''));
 
-          $tab.find('a[href*="/watch/"], a.link-show').each((_, aEl) => {
+            $tab.find('a[href*="/watch/"], a.link-show').each((_, aEl) => {
+              const href = $(aEl).attr('href');
+              if (href) {
+                const fullWatchUrl = href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`;
+                if (!seenWatchUrls.has(fullWatchUrl)) {
+                  seenWatchUrls.add(fullWatchUrl);
+                  watchTargets.push({ url: fullWatchUrl, quality: tabQuality });
+                }
+              }
+            });
+          });
+
+          // Global watch links on the page
+          $('a[href*="/watch/"], a.link-show').each((_, aEl) => {
             const href = $(aEl).attr('href');
             if (href) {
               const fullWatchUrl = href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`;
               if (!seenWatchUrls.has(fullWatchUrl)) {
                 seenWatchUrls.add(fullWatchUrl);
-                watchTargets.push({ url: fullWatchUrl, quality: tabQuality });
+                const parentTab = $(aEl).closest('div[id^="tab-"], .tab-content, .tab-pane').attr('id');
+                const q = (parentTab && tabQualities[parentTab]) || extractQualityNum($(aEl).text() + ' ' + href);
+                watchTargets.push({ url: fullWatchUrl, quality: q });
               }
             }
           });
-        });
 
-        // Global watch links on the page
-        $('a[href*="/watch/"], a.link-show').each((_, aEl) => {
-          const href = $(aEl).attr('href');
-          if (href) {
-            const fullWatchUrl = href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`;
-            if (!seenWatchUrls.has(fullWatchUrl)) {
-              seenWatchUrls.add(fullWatchUrl);
-              const parentTab = $(aEl).closest('div[id^="tab-"], .tab-content, .tab-pane').attr('id');
-              const q = (parentTab && tabQualities[parentTab]) || extractQualityNum($(aEl).text() + ' ' + href);
-              watchTargets.push({ url: fullWatchUrl, quality: q });
-            }
+          // If this page itself is already a watch page
+          if (fullUrl.includes('/watch/')) {
+            watchTargets.unshift({ url: fullUrl, quality: extractQualityNum(title + ' ' + fullUrl) });
           }
-        });
 
-        // If this page itself is already a watch page
-        if (fullUrl.includes('/watch/')) {
-          watchTargets.unshift({ url: fullUrl, quality: extractQualityNum(title + ' ' + fullUrl) });
-        }
+          // 3. Follow watch pages with strict 15,000ms timeout
+          await Promise.all(
+            watchTargets.slice(0, 4).map(async (target) => {
+              try {
+                const $watch = await fetchHTML(target.url, DEEP_STREAM_TIMEOUT_MS);
+                if ($watch) {
+                  const watchHtml = $watch.html() || '';
+                  let directUrl = '';
 
-        // 3. Follow watch pages and extract real direct video URLs
-        // Fetch up to 4 watch pages concurrently
-        await Promise.all(watchTargets.slice(0, 4).map(async (target) => {
-          try {
-            const $watch = await fetchHTML(target.url);
-            if ($watch) {
-              const watchHtml = $watch.html() || '';
-              let directUrl = '';
-
-              // Check JSON-LD schema (Akwam provides contentUrl directly)
-              const jsonLdMatch = watchHtml.match(/"contentUrl"\\s*:\\s*"([^"]+)"/);
-              if (jsonLdMatch && jsonLdMatch[1] && !jsonLdMatch[1].match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
-                directUrl = jsonLdMatch[1];
-              }
-
-              // Fallback to video source tag
-              if (!directUrl) {
-                const src = $watch('video source').attr('src') || $watch('video').attr('src') || '';
-                if (src && !src.match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
-                  directUrl = src;
-                }
-              }
-
-              // Fallback to direct downet video file link
-              if (!directUrl) {
-                $watch('a[href*="downet.net/download/"]').each((_, aEl) => {
-                  const h = $watch(aEl).attr('href');
-                  if (h && !h.match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i) && !directUrl) {
-                    directUrl = h;
+                  // Check JSON-LD schema (Akwam provides contentUrl directly)
+                  const jsonLdMatch = watchHtml.match(/"contentUrl"\\s*:\\s*"([^"]+)"/);
+                  if (jsonLdMatch && jsonLdMatch[1] && !jsonLdMatch[1].match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
+                    directUrl = jsonLdMatch[1];
                   }
-                });
-              }
 
-              if (directUrl && !seenUrls.has(directUrl)) {
-                seenUrls.add(directUrl);
-                const qNum = target.quality;
-                servers.push({
-                  name: `سيرفر مباشر (${qNum}p)`,
-                  quality: qNum,
-                  url: directUrl.startsWith('http') ? directUrl : `${BASE_URL}${directUrl.startsWith('/') ? '' : '/'}${directUrl}`,
-                  referer: `${BASE_URL}/`,
-                  type: directUrl.includes('.m3u8') ? 'hls' : 'mp4',
-                });
-              }
-            }
-          } catch {
-            // ignore error fetching watch page
-          }
-        }));
+                  // Fallback to video source tag
+                  if (!directUrl) {
+                    const src = $watch('video source').attr('src') || $watch('video').attr('src') || '';
+                    if (src && !src.match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
+                      directUrl = src;
+                    }
+                  }
 
-        // If no direct watch servers found, search for direct download video links (excluding image uploads)
-        if (servers.length === 0) {
-          $('a[href*=".mp4"], a[href*="downet.net/download/"]').each((_, el) => {
-            const href = $(el).attr('href');
-            if (href && !href.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) && !seenUrls.has(href)) {
-              seenUrls.add(href);
-              const q = extractQualityNum($(el).text() + ' ' + href);
-              servers.push({
-                name: `سيرفر مباشر (${q}p)`,
-                quality: q,
-                url: href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`,
-                referer: `${BASE_URL}/`,
-                type: href.includes('.m3u8') ? 'hls' : 'mp4',
-              });
-            }
-          });
-        }
+                  // Fallback to direct downet video file link
+                  if (!directUrl) {
+                    $watch('a[href*="downet.net/download/"]').each((_, aEl) => {
+                      const h = $watch(aEl).attr('href');
+                      if (h && !h.match(/\\.(jpg|jpeg|png|webp|gif|svg)$/i) && !directUrl) {
+                        directUrl = h;
+                      }
+                    });
+                  }
 
-        // Series episodes parsing
-        const episodes: EpisodeItem[] = [];
-        if (isSeries) {
-          const seen = new Set<string>();
-          $('a[href*="/episode/"]').each((idx, el) => {
-            const epHref = $(el).attr('href') || '';
-            const epText = $(el).text().trim();
-            if (epHref && !seen.has(epHref)) {
-              seen.add(epHref);
-              const numMatch = (epText + ' ' + epHref).match(/(?:الحلقة|حلقة|episode)[\s\-_]*(\d+)/i) || epHref.match(/(\d+)$/);
-              const epNum = numMatch ? parseInt(numMatch[1]) : idx + 1;
-              const epId = encodeURIComponent(epHref.replace(BASE_URL, '')).replace(/%/g, '_');
-
-              episodes.push({
-                id: epId,
-                episodeNumber: epNum,
-                title: epText || `الحلقة ${epNum}`,
-                duration: '45 دقيقة',
-                servers: [],
-              });
-            }
-          });
-          episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
-
-          // Pre-fetch real direct stream for Episode 1 so playback is instant
-          if (episodes.length > 0) {
-            try {
-              const firstEp = episodes[0];
-              const epDetails = await getMediaDetails(firstEp.id);
-              if (epDetails && epDetails.servers && epDetails.servers.length > 0) {
-                firstEp.servers = epDetails.servers;
-                if (servers.length === 0) {
-                  servers.push(...epDetails.servers);
+                  if (directUrl && !seenUrls.has(directUrl)) {
+                    seenUrls.add(directUrl);
+                    const qNum = target.quality;
+                    servers.push({
+                      name: `سيرفر مباشر (${qNum}p)`,
+                      quality: qNum,
+                      url: directUrl.startsWith('http') ? directUrl : `${BASE_URL}${directUrl.startsWith('/') ? '' : '/'}${directUrl}`,
+                      referer: `${BASE_URL}/`,
+                      type: directUrl.includes('.m3u8') ? 'hls' : 'mp4',
+                    });
+                  }
                 }
+              } catch {
+                // ignore error fetching watch page
               }
-            } catch {
-              // ignore
+            })
+          );
+
+          // Fallback download video links
+          if (servers.length === 0) {
+            $('a[href*=".mp4"], a[href*="downet.net/download/"]').each((_, el) => {
+              const href = $(el).attr('href');
+              if (href && !href.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) && !seenUrls.has(href)) {
+                seenUrls.add(href);
+                const q = extractQualityNum($(el).text() + ' ' + href);
+                servers.push({
+                  name: `سيرفر مباشر (${q}p)`,
+                  quality: q,
+                  url: href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`,
+                  referer: `${BASE_URL}/`,
+                  type: href.includes('.m3u8') ? 'hls' : 'mp4',
+                });
+              }
+            });
+          }
+
+          // Cache the resolved direct stream servers in ConcurrentMemoryCache
+          if (servers.length > 0) {
+            videoStreamsCache.set(id, servers);
+            videoStreamsCache.set(decodedPath, servers);
+            videoStreamsCache.set(fullUrl, servers);
+          }
+        }
+
+        // Series episodes parsing (check cache first!)
+        let episodes: EpisodeItem[] = [];
+        if (isSeries) {
+          if (cachedEpisodes && cachedEpisodes.length > 0) {
+            episodes = cachedEpisodes;
+          } else {
+            const seen = new Set<string>();
+            $('a[href*="/episode/"]').each((idx, el) => {
+              const epHref = $(el).attr('href') || '';
+              const epText = $(el).text().trim();
+              if (epHref && !seen.has(epHref)) {
+                seen.add(epHref);
+                const numMatch = (epText + ' ' + epHref).match(/(?:الحلقة|حلقة|episode)[\s\-_]*(\d+)/i) || epHref.match(/(\d+)$/);
+                const epNum = numMatch ? parseInt(numMatch[1]) : idx + 1;
+                const epId = encodeURIComponent(epHref.replace(BASE_URL, '')).replace(/%/g, '_');
+
+                episodes.push({
+                  id: epId,
+                  episodeNumber: epNum,
+                  title: epText || `الحلقة ${epNum}`,
+                  duration: '45 دقيقة',
+                  servers: [],
+                });
+              }
+            });
+            episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+
+            // Cache series episodes into ConcurrentMemoryCache
+            if (episodes.length > 0) {
+              seriesEpisodesCache.set(id, episodes);
+              seriesEpisodesCache.set(decodedPath, episodes);
+              seriesEpisodesCache.set(fullUrl, episodes);
+            }
+
+            // Pre-fetch real direct stream for Episode 1 so playback is instant
+            if (episodes.length > 0) {
+              try {
+                const firstEp = episodes[0];
+                const epDetails = await getMediaDetails(firstEp.id);
+                if (epDetails && epDetails.servers && epDetails.servers.length > 0) {
+                  firstEp.servers = epDetails.servers;
+                  videoStreamsCache.set(firstEp.id, epDetails.servers);
+                  if (servers.length === 0) {
+                    servers.push(...epDetails.servers);
+                  }
+                }
+              } catch {
+                // ignore
+              }
             }
           }
         }
 
-        // Only if NO real servers were found anywhere, provide backup fallback streams
+        // Fallback backup streams if no servers found anywhere
         if (servers.length === 0) {
           servers.push(
             {
@@ -625,7 +753,11 @@ export async function getMediaDetails(id: string): Promise<MediaItem | null> {
           episodes: episodes.length > 0 ? episodes : sampleFound?.episodes,
         };
 
-        saveToCache(cacheKey, result, 60 * 60 * 1000); // 1 hour cache
+        // Cache in ConcurrentMemoryCache for 60 minutes
+        mediaDetailsCache.set(cacheKey, result, 60 * 60 * 1000);
+        mediaDetailsCache.set(id, result, 60 * 60 * 1000);
+        mediaDetailsCache.set(decodedPath, result, 60 * 60 * 1000);
+        saveToCache(cacheKey, result, 60 * 60 * 1000);
         return result;
       }
     } catch (err) {
@@ -633,6 +765,7 @@ export async function getMediaDetails(id: string): Promise<MediaItem | null> {
     }
 
     const fallback = sampleFound || SAMPLE_CATALOG[0];
+    mediaDetailsCache.set(cacheKey, fallback, 15 * 60 * 1000);
     saveToCache(cacheKey, fallback, 15 * 60 * 1000);
     return fallback;
   })();
@@ -735,4 +868,67 @@ export async function deepCrawlTargetPage(targetInput: string): Promise<LinkGrab
     files,
     episodes: seriesEpisodes,
   };
+}
+
+/**
+ * AkwamScraper facade class encapsulating the ConcurrentHashMap-based in-memory caching system
+ * and scraper methods.
+ */
+export class AkwamScraper {
+  static episodesCache = seriesEpisodesCache;
+  static streamsCache = videoStreamsCache;
+  static detailsCache = mediaDetailsCache;
+  static homeCache = homeContentCache;
+  static htmlCache = htmlCache;
+
+  /**
+   * Retrieves parsed episodes for a series from memory if previously checked
+   */
+  static getEpisodes(seriesId: string): EpisodeItem[] | null {
+    return seriesEpisodesCache.get(seriesId) || seriesEpisodesCache.get(parseMediaId(seriesId));
+  }
+
+  /**
+   * Saves parsed episodes for a series into the concurrent memory cache
+   */
+  static setEpisodes(seriesId: string, episodes: EpisodeItem[], ttlMs = 60 * 60 * 1000): void {
+    seriesEpisodesCache.set(seriesId, episodes, ttlMs);
+    seriesEpisodesCache.set(parseMediaId(seriesId), episodes, ttlMs);
+  }
+
+  /**
+   * Retrieves direct video streams for a video or episode from memory if previously parsed
+   */
+  static getStreams(videoId: string): ServerOption[] | null {
+    return videoStreamsCache.get(videoId) || videoStreamsCache.get(parseMediaId(videoId));
+  }
+
+  /**
+   * Saves direct video streams into the concurrent memory cache
+   */
+  static setStreams(videoId: string, streams: ServerOption[], ttlMs = 60 * 60 * 1000): void {
+    videoStreamsCache.set(videoId, streams, ttlMs);
+    videoStreamsCache.set(parseMediaId(videoId), streams, ttlMs);
+  }
+
+  /**
+   * Returns home screen items (cached for 15 minutes TTL)
+   */
+  static async getHomeContent() {
+    return getHomeContent();
+  }
+
+  /**
+   * Returns media details with instant caching
+   */
+  static async getMediaDetails(id: string) {
+    return getMediaDetails(id);
+  }
+
+  /**
+   * Deep crawler for LinkGrabber
+   */
+  static async deepCrawlTargetPage(url: string) {
+    return deepCrawlTargetPage(url);
+  }
 }
