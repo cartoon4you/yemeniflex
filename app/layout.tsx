@@ -7,6 +7,7 @@ import MobileBottomNav from '@/components/MobileBottomNav';
 import TelemetryOptimization from '@/components/TelemetryOptimization';
 import Link from 'next/link';
 import { Film, Heart, Shield, Sparkles } from 'lucide-react';
+import YemenflexLogo from '@/components/YemenflexLogo';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -21,6 +22,14 @@ export const metadata: Metadata = {
   title: 'يمن فلکس YemenFlex - منصة مشاهدة أحدث الأفلام والمسلسلات',
   description:
     'يمن فلکس (YemenFlex) - منصة مشاهدة الأفلام والمسلسلات مع جودات متعددة وسيرفرات سريعة وقائمة مشاهدة سحابية متزامنة.',
+  icons: {
+    icon: [
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon.ico' },
+    ],
+    apple: '/apple-touch-icon.png',
+    shortcut: '/favicon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -31,12 +40,21 @@ export const metadata: Metadata = {
     description:
       'يمن فلکس (YemenFlex) - منصة مشاهدة الأفلام والمسلسلات مع جودات متعددة وسيرفرات سريعة وقائمة مشاهدة سحابية متزامنة.',
     type: 'website',
+    images: [
+      {
+        url: '/yemenflex-banner.jpg',
+        width: 1280,
+        height: 720,
+        alt: 'يمن فلکس Yemenflex',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'يمن فلکس YemenFlex',
     description:
       'يمن فلکس (YemenFlex) - منصة مشاهدة الأفلام والمسلسلات مع جودات متعددة وسيرفرات سريعة.',
+    images: ['/yemenflex-banner.jpg'],
   },
 };
 
@@ -48,6 +66,38 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className="dark bg-neutral-950 text-neutral-100">
       <head>
+        {/* Early Chunk & Script Load Resilience */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                function isChunkError(msg) {
+                  return typeof msg === 'string' && (msg.indexOf('ChunkLoadError') !== -1 || msg.indexOf('Loading chunk') !== -1);
+                }
+                window.addEventListener('error', function(e) {
+                  var msg = (e && e.message) ? e.message : ((e && e.error && e.error.message) ? e.error.message : '');
+                  if (isChunkError(msg) || (e && e.error && e.error.name === 'ChunkLoadError')) {
+                    if (e.preventDefault) e.preventDefault();
+                    console.warn('YemenFlex: Handled early ChunkLoadError gracefully.');
+                    var reloadKey = 'chunk_reload_' + location.pathname;
+                    if (!sessionStorage.getItem(reloadKey)) {
+                      sessionStorage.setItem(reloadKey, '1');
+                      location.reload();
+                    }
+                  }
+                }, true);
+                window.addEventListener('unhandledrejection', function(e) {
+                  var reason = (e && e.reason) ? (e.reason.message || String(e.reason)) : '';
+                  if (isChunkError(reason)) {
+                    if (e.preventDefault) e.preventDefault();
+                    console.warn('YemenFlex: Suppressed unhandled chunk rejection.');
+                  }
+                });
+              })();
+            `,
+          }}
+        />
+
         {/* Mobile & Web App optimization */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-touch-fullscreen" content="yes" />
@@ -68,18 +118,15 @@ export default function RootLayout({
         <AuthProvider>
           <WatchlistProvider>
             <Navbar />
-            <main className="flex-1 w-full pb-24 md:pb-16">{children}</main>
             <MobileBottomNav />
-            <footer className="w-full bg-neutral-950 border-t border-neutral-800/80 py-10 px-4 sm:px-8 text-neutral-400 text-xs mb-16 md:mb-0" dir="rtl">
+            <main className="flex-1 w-full pb-12 md:pb-16">{children}</main>
+            <footer className="w-full bg-neutral-950 border-t border-neutral-800/80 py-10 px-4 sm:px-8 text-neutral-400 text-xs" dir="rtl">
               <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white">
-                    <Film className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-white">يمن فلکس (YemenFlex)</span>
-                    <p className="text-[11px] text-neutral-400">بث فائق الجودة، سيرفرات سريعة، وبدون إعلانات مزعجة.</p>
-                  </div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <YemenflexLogo size="sm" />
+                  <p className="text-[11px] text-neutral-400 max-w-xs sm:border-r sm:border-neutral-800 sm:pr-3">
+                    بث فائق الجودة، سيرفرات سريعة، وبدون إعلانات مزعجة.
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-6 text-neutral-400">

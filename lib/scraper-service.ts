@@ -110,8 +110,8 @@ const pendingRequests = new Map<string, Promise<any>>();
 // ==============================================================================
 // 2. OPTIMIZED NETWORK CONNECTIONS & TIMEOUTS
 // ==============================================================================
-export const STANDARD_TIMEOUT_MS = 10000; // Strict 10,000ms timeout for standard HTML
-export const DEEP_STREAM_TIMEOUT_MS = 15000; // Strict 15,000ms timeout for watch page & stream extraction
+export const STANDARD_TIMEOUT_MS = 4000; // Strict 4,000ms timeout for standard HTML to avoid chunk & page load stalls
+export const DEEP_STREAM_TIMEOUT_MS = 8000; // Strict 8,000ms timeout for watch page & stream extraction
 
 /**
  * Fetch and load HTML using cheerio with strict timeouts (10000ms / 15000ms)

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, AlertCircle } from 'lucide-react';
 import MediaCard from '@/components/MediaCard';
 import { MediaItem } from '@/lib/types';
+import { safeFetchJson } from '@/lib/utils';
 
 function SearchContent() {
   const router = useRouter();
@@ -30,15 +31,14 @@ function SearchContent() {
       
       try {
         setLoading(true);
-        const res = await fetch(`/api/search?q=${encodeURIComponent(term.trim())}`, {
+        const result = await safeFetchJson<any>(`/api/search?q=${encodeURIComponent(term.trim())}`, {
           signal: abortControllerRef.current.signal
         });
-        const data = await res.json();
-        if (data.success) {
-          setResults(data.data || []);
+        if (result.ok && result.data?.success) {
+          setResults(result.data.data || []);
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError') {
+        if (error?.name !== 'AbortError') {
           console.error('Search error:', error);
         }
       } finally {

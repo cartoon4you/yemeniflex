@@ -1,5 +1,7 @@
 'use client';
 
+import { safeFetchJson } from './utils';
+
 /**
  * YemenFlex Intelligent Preloading Engine (محرك التحميل المسبق فائق السرعة)
  *
@@ -180,16 +182,16 @@ export async function preloadMediaDetails(mediaId: string): Promise<any | null> 
   }
 
   try {
-    const res = await fetch(`/api/details?id=${encodeURIComponent(mediaId)}`, {
+    const result = await safeFetchJson<any>(`/api/details?id=${encodeURIComponent(mediaId)}`, {
       cache: 'force-cache',
     });
-    const json = await res.json();
-    if (json.success && json.data) {
-      detailsCache.set(mediaId, json.data);
+
+    if (result.ok && result.data?.success && result.data.data) {
+      const item = result.data.data;
+      detailsCache.set(mediaId, item);
       notifyStats();
 
       // Chain: Preload the backdrop and primary video stream of this media item
-      const item = json.data;
       if (item.banner) preloadImage(item.banner, 'high');
       if (item.poster) preloadImage(item.poster, 'auto');
 
@@ -198,7 +200,7 @@ export async function preloadMediaDetails(mediaId: string): Promise<any | null> 
         preloadVideoChunk(primaryServer.url, primaryServer.referer);
       }
 
-      return json.data;
+      return item;
     }
   } catch {
     // Ignore prefetch error

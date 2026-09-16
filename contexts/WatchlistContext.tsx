@@ -131,7 +131,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, watchlistColPath);
+        if (error.code === 'unavailable' || error.message.includes('offline')) {
+          console.warn('Firestore offline mode active for watchlist snapshot.');
+        } else {
+          handleFirestoreError(error, OperationType.GET, watchlistColPath);
+        }
         setLoading(false);
       }
     );

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { safeFetchJson } from '@/lib/utils';
 
 // ==================== CONFIG & TYPES ====================
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -70,11 +71,13 @@ export default function WorldCinemaContent() {
 
   const fetchTMDB = async (endpoint: string, signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/tmdb?endpoint=${encodeURIComponent(endpoint)}`, { signal });
-      if (!res.ok) throw new Error('API Error');
-      return await res.json();
+      const result = await safeFetchJson<any>(`/api/tmdb?endpoint=${encodeURIComponent(endpoint)}`, { signal });
+      if (!result.ok || !result.data) {
+        return { results: [] };
+      }
+      return result.data;
     } catch (err: any) {
-      if (err.name === 'AbortError') return null;
+      if (err?.name === 'AbortError') return null;
       return { results: [] };
     }
   };

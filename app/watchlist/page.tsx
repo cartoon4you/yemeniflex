@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Bookmark,
   Trash2,
@@ -95,10 +96,14 @@ export default function WatchlistPage() {
               className="group relative flex flex-col rounded-2xl overflow-hidden bg-neutral-900/80 border border-neutral-800/80 transition hover:-translate-y-1.5 hover:border-red-600/50 hover:shadow-xl"
             >
               <div className="relative aspect-[2/3] w-full overflow-hidden bg-neutral-950">
-                <img
+                <Image
                   src={item.poster || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600'}
                   alt={item.title}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 16vw"
+                  unoptimized
+                  referrerPolicy="no-referrer"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-black/30"></div>
@@ -124,6 +129,7 @@ export default function WatchlistPage() {
                 {/* Play Button Overlay */}
                 <Link
                   href={`/watch?id=${encodeURIComponent(item.id)}`}
+                  prefetch={false}
                   className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <div className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-2xl scale-90 group-hover:scale-100 transition-transform">
@@ -135,6 +141,7 @@ export default function WatchlistPage() {
               <div className="p-2.5 sm:p-3 flex flex-col justify-between flex-1 gap-1">
                 <Link
                   href={`/watch?id=${encodeURIComponent(item.id)}`}
+                  prefetch={false}
                   className="text-xs sm:text-sm font-bold text-neutral-100 hover:text-red-500 line-clamp-1 transition"
                 >
                   {item.title}
@@ -144,6 +151,7 @@ export default function WatchlistPage() {
                   <span>{item.year || '2024'}</span>
                   <Link
                     href={`/watch?id=${encodeURIComponent(item.id)}`}
+                    prefetch={false}
                     className="text-red-500 hover:underline font-semibold"
                   >
                     شاهد الآن

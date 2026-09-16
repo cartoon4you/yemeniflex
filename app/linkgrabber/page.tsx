@@ -21,6 +21,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { LinkGrabberResult, LinkGrabberFile } from '@/lib/types';
+import { safeFetchJson } from '@/lib/utils';
 
 export default function LinkGrabberPage() {
   const [targetInput, setTargetInput] = useState('https://akwam.ss/movie/11382/harudu');
@@ -52,14 +53,13 @@ export default function LinkGrabberPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/linkgrabber?url=${encodeURIComponent(input)}`);
-      const data = await res.json();
+      const result = await safeFetchJson<any>(`/api/linkgrabber?url=${encodeURIComponent(input)}`);
 
-      if (data.success && data.data) {
-        setResult(data.data);
-        setSelectedFileIds(data.data.files.map((f: LinkGrabberFile) => f.id));
+      if (result.ok && result.data?.success && result.data.data) {
+        setResult(result.data.data);
+        setSelectedFileIds(result.data.data.files.map((f: LinkGrabberFile) => f.id));
       } else {
-        setError(data.error || 'تعذر استخراج روابط الصفحة المستهدفة');
+        setError(result.data?.error || result.error || 'تعذر استخراج روابط الصفحة المستهدفة');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'حدث خطأ في الاتصال بالسيرفر';
@@ -400,6 +400,7 @@ if __name__ == '__main__':
             <div className="flex items-center gap-2 w-full md:w-auto">
               <Link
                 href={`/watch?id=${encodeURIComponent(result.source_url.replace('https://akwam.ss', ''))}`}
+                prefetch={false}
                 className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold border border-neutral-700 w-full md:w-auto transition"
               >
                 <Play className="w-4 h-4 fill-white" />

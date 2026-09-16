@@ -55,10 +55,10 @@ export default function MobileBottomNav() {
     <nav
       id="mobile-bottom-navbar"
       aria-label="التنقل السريع للجوال"
-      className="fixed bottom-0 inset-x-0 z-40 md:hidden bg-neutral-950/95 backdrop-blur-xl border-t border-neutral-800/90 shadow-[0_-8px_30px_rgba(0,0,0,0.8)] pb-[env(safe-area-inset-bottom,0px)]"
+      className="sticky top-[72px] inset-x-0 z-40 md:hidden bg-neutral-950/95 backdrop-blur-xl border-b border-neutral-800/90 shadow-md shadow-black/40"
       dir="rtl"
     >
-      <div className="grid grid-cols-5 h-16 max-w-md mx-auto items-center px-2">
+      <div className="grid grid-cols-5 h-14 max-w-md mx-auto items-center px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = item.isActive;
@@ -87,7 +87,7 @@ export default function MobileBottomNav() {
                 {item.label}
               </span>
               {active && (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-red-500" />
+                <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-red-500" />
               )}
             </Link>
           );

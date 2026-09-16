@@ -72,6 +72,10 @@ const nextConfig: NextConfig = {
         ignored: /.*/,
       };
     }
+    if (dev && config.output) {
+      // Prevent premature chunk loading timeouts during heavy container compilation
+      config.output.chunkLoadTimeout = 300000;
+    }
     return config;
   },
 };

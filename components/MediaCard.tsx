@@ -40,19 +40,16 @@ export default function MediaCard({ item }: MediaCardProps) {
 
   // 2. Hover / Touch Interaction Preloading (Warm up Watch Page & Video Chunks)
   const handleInteractionPreload = () => {
-    // A. Preload the Watch Route in Next.js
-    router.prefetch(`/watch?id=${encodeURIComponent(item.id)}`);
-
-    // B. Preload high priority poster and backdrop
+    // A. Preload high priority poster and backdrop
     if (item.poster) preloadImage(item.poster, 'high');
     if (item.banner) preloadImage(item.banner, 'auto');
 
-    // C. Preload video chunk of primary server if known
+    // B. Preload video chunk of primary server if known
     if (item.servers && item.servers.length > 0 && item.servers[0]?.url) {
       preloadVideoChunk(item.servers[0].url, item.servers[0].referer);
     }
 
-    // D. Preload complete watch details via API
+    // C. Preload complete watch details via API
     preloadMediaDetails(item.id);
   };
 
@@ -76,7 +73,11 @@ export default function MediaCard({ item }: MediaCardProps) {
       className="group relative flex flex-col rounded-2xl overflow-hidden bg-neutral-900/80 border border-neutral-800/80 transition-all duration-300 hover:-translate-y-1.5 hover:border-red-600/50 hover:shadow-xl hover:shadow-red-950/20"
       dir="rtl"
     >
-      <Link href={`/watch?id=${encodeURIComponent(item.id)}`} className="block relative aspect-[2/3] w-full overflow-hidden bg-neutral-950">
+      <Link
+        href={`/watch?id=${encodeURIComponent(item.id)}`}
+        prefetch={false}
+        className="block relative aspect-[2/3] w-full overflow-hidden bg-neutral-950"
+      >
         {/* Placeholder skeleton while loading */}
         {!imageLoaded && (
           <div className="absolute inset-0 bg-neutral-900/90 animate-pulse flex items-center justify-center">
@@ -84,7 +85,7 @@ export default function MediaCard({ item }: MediaCardProps) {
           </div>
         )}
 
-        {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={item.poster || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600'}
           alt={item.title}
@@ -141,6 +142,7 @@ export default function MediaCard({ item }: MediaCardProps) {
         <div>
           <Link
             href={`/watch?id=${encodeURIComponent(item.id)}`}
+            prefetch={false}
             onMouseEnter={handleInteractionPreload}
             className="block text-xs sm:text-sm font-bold text-neutral-100 hover:text-red-500 transition line-clamp-1 leading-snug"
           >

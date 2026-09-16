@@ -26,6 +26,7 @@ import { useWatchlist } from '@/contexts/WatchlistContext';
 import { CATEGORIES } from '@/lib/catalog-data';
 import { useIsMounted } from '@/hooks/use-mounted';
 import PreloadSpeedBadge from '@/components/PreloadSpeedBadge';
+import YemenflexLogo from '@/components/YemenflexLogo';
 
 export default function Navbar() {
   const router = useRouter();
@@ -115,19 +116,10 @@ export default function Navbar() {
           <Link
             href="/"
             id="brand-logo"
-            className="flex items-center gap-2.5 group transition-transform active:scale-95"
+            className="group transition-transform active:scale-95"
+            aria-label="الصفحة الرئيسية - يمن فلکس Yemenflex"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-lg shadow-red-900/30 group-hover:shadow-red-600/40 transition">
-              <Film className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-extrabold tracking-wide text-white group-hover:text-red-500 transition">
-                يمن <span className="text-red-500">فلکس</span>
-              </span>
-              <span className="text-[10px] text-neutral-400 -mt-1 font-mono tracking-wider">
-                YemenFlex
-              </span>
-            </div>
+            <YemenflexLogo size="md" priority />
           </Link>
 
           {/* Desktop Navigation Links */}
@@ -297,7 +289,7 @@ export default function Navbar() {
                 className="flex items-center gap-2 p-1.5 rounded-full hover:bg-neutral-800/80 border border-neutral-800 transition"
               >
                 {currentUser.photoURL ? (
-                  // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={currentUser.photoURL}
                     alt={currentUser.displayName || 'User'}

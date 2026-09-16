@@ -3,6 +3,7 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Star,
   Bookmark,
@@ -23,6 +24,7 @@ import VideoPlayer from '@/components/VideoPlayer';
 import EpisodesGrid from '@/components/EpisodesGrid';
 import { MediaItem, EpisodeItem, ServerOption } from '@/lib/types';
 import { useWatchlist } from '@/contexts/WatchlistContext';
+import { safeFetchJson } from '@/lib/utils';
 import {
   getCachedMediaDetails,
   preloadMediaDetails,
@@ -65,12 +67,11 @@ function WatchContent() {
       }
 
       try {
-        const res = await fetch(`/api/details?id=${encodeURIComponent(mediaId)}`, {
+        const result = await safeFetchJson<any>(`/api/details?id=${encodeURIComponent(mediaId)}`, {
           cache: 'force-cache',
         });
-        const json = await res.json();
-        if (json.success && json.data) {
-          const item: MediaItem = json.data;
+        if (result.ok && result.data?.success && result.data.data) {
+          const item: MediaItem = result.data.data;
           setMedia(item);
 
           // Preload backdrop & poster
@@ -115,14 +116,13 @@ function WatchContent() {
     } else {
       try {
         setLoadingEpisode(true);
-        const res = await fetch(`/api/details?id=${encodeURIComponent(ep.id)}`);
-        const json = await res.json();
-        if (json.success && json.data?.servers && json.data.servers.length > 0) {
-          ep.servers = json.data.servers;
-          setActiveServers(json.data.servers);
+        const result = await safeFetchJson<any>(`/api/details?id=${encodeURIComponent(ep.id)}`);
+        if (result.ok && result.data?.success && result.data.data?.servers && result.data.data.servers.length > 0) {
+          ep.servers = result.data.data.servers;
+          setActiveServers(result.data.data.servers);
           // Preload the primary video chunk of this episode
-          if (json.data.servers[0]?.url) {
-            preloadVideoChunk(json.data.servers[0].url, json.data.servers[0].referer);
+          if (result.data.data.servers[0]?.url) {
+            preloadVideoChunk(result.data.data.servers[0].url, result.data.data.servers[0].referer);
           }
         } else {
           setActiveServers(ep.servers || []);
@@ -164,11 +164,10 @@ function WatchContent() {
     const targetId = selectedEpisode?.id || media?.id;
     if (!targetId) return false;
     try {
-      const res = await fetch(`/api/details?id=${encodeURIComponent(targetId)}`);
-      const json = await res.json();
-      if (json.success && json.data?.servers && json.data.servers.length > 0) {
-        setActiveServers(json.data.servers);
-        setSelectedEpisode((prev) => (prev ? { ...prev, servers: json.data.servers } : null));
+      const result = await safeFetchJson<any>(`/api/details?id=${encodeURIComponent(targetId)}`);
+      if (result.ok && result.data?.success && result.data.data?.servers && result.data.data.servers.length > 0) {
+        setActiveServers(result.data.data.servers);
+        setSelectedEpisode((prev) => (prev ? { ...prev, servers: result.data.data.servers } : null));
         return true;
       }
     } catch (e) {
@@ -300,9 +299,13 @@ function WatchContent() {
       {/* 4. Story / Synopsis & Meta Card */}
       <section className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-neutral-900/60 p-6 rounded-3xl border border-neutral-800/80">
         <div className="md:col-span-1">
-          <img
+          <Image
             src={media.poster}
             alt={media.title}
+            width={300}
+            height={450}
+            unoptimized
+            referrerPolicy="no-referrer"
             className="w-48 md:w-full rounded-2xl object-cover shadow-2xl mx-auto border border-neutral-800"
           />
         </div>

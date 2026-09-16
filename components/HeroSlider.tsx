@@ -25,12 +25,11 @@ export default function HeroSlider({ items }: HeroSliderProps) {
 
   const handleWarmWatch = useCallback(() => {
     if (!current) return;
-    router.prefetch(`/watch?id=${encodeURIComponent(current.id)}`);
     preloadMediaDetails(current.id);
     if (current.servers?.[0]?.url) {
       preloadVideoChunk(current.servers[0].url, current.servers[0].referer);
     }
-  }, [current, router]);
+  }, [current]);
 
   // Predictive Preloading: Preload the next & previous slide images and current video stream
   useEffect(() => {
@@ -121,7 +120,7 @@ export default function HeroSlider({ items }: HeroSliderProps) {
     >
       {/* Background Backdrop Image with smooth fade */}
       <div className="absolute inset-0">
-        {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           key={current.id}
           src={current.banner || current.poster}
@@ -189,6 +188,7 @@ export default function HeroSlider({ items }: HeroSliderProps) {
           <div className="pt-1 sm:pt-2 flex items-center flex-wrap gap-2.5 sm:gap-3">
             <Link
               href={`/watch?id=${encodeURIComponent(current.id)}`}
+              prefetch={false}
               id="hero-watch-now-btn"
               onMouseEnter={handleWarmWatch}
               onTouchStart={handleWarmWatch}
